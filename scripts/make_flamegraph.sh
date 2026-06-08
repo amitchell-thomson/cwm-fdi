@@ -15,7 +15,7 @@ STACKCOLLAPSE="$(command -v stackcollapse-perf.pl || true)"
 FLAMEGRAPH="$(command -v flamegraph.pl || true)"
 
 if [[ -z "$STACKCOLLAPSE" && -x "$DIR/scripts/FlameGraph/stackcollapse-perf.pl" ]]; then
-  STACKCOLLAPSE="$DIR/scipts/FlameGraph/stackcollapse-perf.pl"
+  STACKCOLLAPSE="$DIR/scripts/FlameGraph/stackcollapse-perf.pl"
 fi
 
 if [[ -z "$FLAMEGRAPH" && -x "$DIR/scripts/FlameGraph/flamegraph.pl" ]]; then
