@@ -1,7 +1,7 @@
 # !/usr/bin/python3
 import numpy as np
 import matplotlib.pyplot as plt
-
+from statistics import mean, median, quantiles
 
 # parameters to modify 
 filename="/home/ubuntu/CWM-FDI/assignment2/time_c.txt"
@@ -14,6 +14,15 @@ bins=100 #adjust the number of bins to your plot
 
 ## load data from input file
 t = np.loadtxt(filename, delimiter=" ", dtype="float")
+
+# print statistics
+print(f"min/max: {min(t)}/{max(t)}")
+print(f"mean: {mean(t)}")
+print(f"median: {median(t)}")
+
+q = quantiles(t, n=100)
+print(f"90th percentile: {q[89]}")
+print(f"99th percentile: {q[98]}")
 
 ## if your data is "X Y" (2 cols), use the following line
 #plt.plot(t[:,0], t[:,1], label=label)  # Plot some data on the (implicit) axes.
