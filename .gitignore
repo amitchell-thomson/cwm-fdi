@@ -1,4 +1,9 @@
 #Python
+assignment1/out.perf
+*.data
+*.data.old
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

@@ -9,6 +9,10 @@ so the computation has an observable result.
 import sys
 from typing import List
 
+import time
+
+from statistics import mean
+
 Matrix = List[List[float]]
 
 #The matrix entries are initialized deterministically so that every run uses
@@ -25,15 +29,25 @@ def zero_matrix(n: int) -> Matrix:
     return [[0.0 for _ in range(n)] for _ in range(n)]
 
 
+
+cell_times = []
 # Intentionally simple O(n^3) matrix multiplication.
 # This loop order is correct but cache-unfriendly for matrix B.
 def matmul_slow(a: Matrix, b: Matrix, c: Matrix, n: int) -> None:
     for i in range(n):
         for j in range(n):
             total = 0.0
+            
+            start = time.perf_counter()
+
             for k in range(n):
                 total += a[i][k] * b[k][j]
             c[i][j] = total
+            
+            end = time.perf_counter()
+            elapsed = end - start
+            cell_times.append(elapsed)
+    return cell_times
 
 
 def checksum(m: Matrix, n: int) -> float:
@@ -78,11 +92,22 @@ def main(argv: list[str]) -> int:
     b = init_matrix(n, 2.0)
 
     c = zero_matrix(n)
-
+    
+    calc_times = []
     for _ in range(reps):
-        matmul_slow(a, b, c, n)
+        start = time.perf_counter()
+
+        cell_times = matmul_slow(a, b, c, n)
+        
+        end = time.perf_counter()
+        elapsed = end - start
+
+        calc_times.append(elapsed)
 
     print(f"n={n} reps={reps} checksum={checksum(c, n):.6f}")
+    print(f"avg cell time: {mean(cell_times)}")
+    print(f"avg calc time: {mean(calc_times)}")
+
     return 0
 
 
