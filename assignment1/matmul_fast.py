@@ -91,7 +91,7 @@ def usage(prog: str) -> None:
 def parse_args(argv: list[str]) -> tuple[int, int]:
     #Default values to use when none provided.
     n = 128
-    reps = 50
+    reps = 2
 
     if len(argv) > 1:
         n = int(argv[1])
@@ -112,22 +112,6 @@ def main(argv: list[str]) -> int:
     b = init_matrix(n, 2.0)
 
     c = zero_matrix(n)
-    times1 = []
-    for _ in range(reps):
-        start = time.perf_counter()
-        matmul_fast1(a, b, c, n)
-        end = time.perf_counter()
-        elapsed = end - start
-        times1.append(elapsed)
-    
-    times2 = []
-    for _ in range(reps):
-        start = time.perf_counter()
-        matmul_fast2(a, b, c, n)
-        end = time.perf_counter()
-        elapsed = end - start
-        times2.append(elapsed)
-    
     times3 = []
     for _ in range(reps):
         start = time.perf_counter()
@@ -138,8 +122,6 @@ def main(argv: list[str]) -> int:
 
 
     print(f"n={n} reps={reps} checksum={checksum(c, n):.6f}")
-    print(f"matmul_fast1 avg time = {mean(times1)}")
-    print(f"matmul_fast2 avg time = {mean(times2)}")
     print(f"matmul_fast3 avg time = {mean(times3)}")
     return 0
 
