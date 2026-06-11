@@ -126,7 +126,7 @@ class WattcherApp(App):
                 yield TrendPanel("Package Temperature", "°C", id="temp")
             with Vertical(id="right"):
                 yield BarsPanel("CPU", id="cpu")
-                yield BarsPanel("C-state residency", id="cstates")
+                yield BarsPanel("CPU Sleep States", id="cstates")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -157,5 +157,5 @@ class WattcherApp(App):
         active = max(0.0, 100 - sum(cstates.values()))
         rows = [("C0", active)] + sorted(cstates.items())
         self.query_one("#cstates", BarsPanel).update_rows(
-            rows, header="C0 = awake, higher = deeper sleep"
+            rows, header="% of time per state — C0 = awake, deeper = more power saved"
         )

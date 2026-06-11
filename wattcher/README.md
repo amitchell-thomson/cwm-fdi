@@ -13,8 +13,8 @@ the same kernel counters directly (no subprocesses).
 - **Package temperature (°C)** from `/sys/class/thermal`.
 - **CPU utilisation** overall + per core from `/proc/stat`, and average
   frequency from cpufreq.
-- **C-state residency** (where the CPU sleeps) from
-  `/sys/devices/system/cpu/cpu*/cpuidle`.
+- **CPU sleep states** — % of time spent in each idle C-state (where the CPU
+  sleeps, and how deeply) from `/sys/devices/system/cpu/cpu*/cpuidle`.
 
 ## Running
 
