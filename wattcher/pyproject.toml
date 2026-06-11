@@ -1,0 +1,19 @@
+[project]
+name = "wattcher"
+version = "0.1.0"
+description = "Live CPU power/energy/thermal dashboard built on Linux RAPL sysfs counters"
+readme = "README.md"
+authors = [
+    { name = "amitchell-thomson", email = "alec.mitchellthomson@gmail.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "textual>=8.2.7",
+]
+
+[project.scripts]
+wattcher = "wattcher:main"
+
+[build-system]
+requires = ["uv_build>=0.11.6,<0.12.0"]
+build-backend = "uv_build"
