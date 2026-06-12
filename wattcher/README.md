@@ -46,6 +46,7 @@ live package power. Sources, best first:
 
 ```sh
 sudo uv run wattcher curve                      # default 0,20,…,100% sweep
+sudo uv run wattcher curve --step 5             # finer: 0,5,10,…,100%
 sudo uv run wattcher curve --levels 0,25,50,75,100
 ```
 
@@ -62,6 +63,17 @@ steady-state package power at each, then reports:
   cores at 50%*: identical total load, but is it cheaper to concentrate it
   (letting idle cores sleep deep) or spread it (letting every core clock
   lower)? The answer is empirical and printed for your chip.
+
+The sweep is saved to `$XDG_DATA_HOME/wattcher/curve.json` (override with
+`--out`). View it as a braille chart, with a `f` key to toggle the
+utilisation and frequency curves:
+
+```sh
+uv run wattcher plot          # standalone viewer — no RAPL needed, runs anywhere
+```
+
+or press **`c`** inside the live dashboard to open the same page. A finer
+`--step` gives a smoother curve to plot.
 
 ### Permissions on Linux
 
@@ -81,7 +93,8 @@ sudo chmod a+r /sys/class/powercap/intel-rapl*/energy_uj
 - `src/wattcher/app.py` — Textual TUI
 - `src/wattcher/carbon.py` — IP geolocation + grid carbon intensity
 - `src/wattcher/loadgen.py` — controllable per-core load for experiments
-- `src/wattcher/curve.py` — the `wattcher curve` power-curve measurement
+- `src/wattcher/curve.py` — `wattcher curve` measurement + saved-data I/O
+- `src/wattcher/plot.py` — dependency-free braille line chart for the viewer
 
 ## Roadmap
 

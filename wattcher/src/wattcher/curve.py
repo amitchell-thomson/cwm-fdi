@@ -19,15 +19,36 @@ pinned to specific cores.
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from contextlib import nullcontext
+from pathlib import Path
 
 from wattcher.loadgen import load
 from wattcher.sample import SensorError
 from wattcher.sensors.linux import LinuxSource
 
 DEFAULT_LEVELS = [0, 20, 40, 60, 80, 100]
+
+
+def default_data_path() -> Path:
+    """Where `curve` saves and the TUI viewer looks, honouring XDG."""
+    base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    return Path(base) / "wattcher" / "curve.json"
+
+
+def save_curve(data: dict, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2))
+
+
+def load_curve(path: Path | None = None) -> dict | None:
+    path = path or default_data_path()
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
 
 
 def _measure(source: LinuxSource, seconds: float, interval: float = 0.25):
@@ -77,10 +98,14 @@ def _prime() -> LinuxSource:
 
 def run_curve(
     levels: list[int] | None = None,
+    step: int | None = None,
     settle: float = 1.5,
     window: float = 2.0,
+    out: Path | None = None,
 ) -> None:
-    levels = levels or DEFAULT_LEVELS
+    if levels is None:
+        levels = list(range(0, 101, step)) if step else DEFAULT_LEVELS
+    out = out or default_data_path()
     ncpu = os.cpu_count() or 1
     cores = list(range(ncpu))
     pinned = hasattr(os, "sched_setaffinity")
@@ -119,6 +144,7 @@ def run_curve(
 
     # -- frequency -> power (same samples, reordered) ---------------------
     freq_rows = sorted((f, w) for _, _, w, f in rows if f)
+    fa = fb = fr2 = None
     if len(freq_rows) >= 2:
         fmax = max(w for _, w in freq_rows)
         print("\nFrequency → power")
@@ -154,3 +180,22 @@ def run_curve(
         print("    Spreading lets each core clock lower (dynamic power ~V²·f);"
               " concentrating lets idle cores reach deeper C-states. The winner"
               " depends on which effect dominates on this chip.")
+
+    # -- persist for the TUI viewer --------------------------------------
+    data = {
+        "ncpu": ncpu,
+        "util": [
+            {"target": lvl, "busy": busy, "watts": watts, "freq": freq}
+            for lvl, busy, watts, freq in rows
+        ],
+        "fit": {"intercept": a, "slope": b, "r2": r2},
+        "freq_fit": (
+            {"intercept": fa, "slope_per_ghz": fb * 1000, "r2": fr2} if fa is not None else None
+        ),
+        "concentration": [
+            {"label": label, "watts": watts, "freq": freq} for label, watts, freq in results
+        ],
+    }
+    save_curve(data, out)
+    print(f"\nSaved curve data to {out}")
+    print("View it in the TUI:  wattcher  (press 'c')   or:  wattcher plot")

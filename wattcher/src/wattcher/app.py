@@ -5,13 +5,19 @@ from __future__ import annotations
 
 from collections import deque
 
+from pathlib import Path
+
+from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.screen import Screen
 from textual.theme import Theme
 from textual.widgets import Footer, Header, Sparkline, Static
 
 from wattcher.carbon import CarbonIntensity, fetch_carbon
+from wattcher.curve import load_curve
+from wattcher.plot import line_chart
 from wattcher.sample import Sample
 from wattcher.sensors import SensorSource
 
@@ -119,9 +125,86 @@ class CarbonPanel(Vertical):
         )
 
 
+class CurvePlot(Static):
+    """Renders a saved power curve as a braille chart; toggles util/freq view."""
+
+    def __init__(self, data: dict, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._data = data
+        self._view = "util"  # or "freq"
+
+    def on_resize(self) -> None:
+        self.refresh()  # re-fit the chart to the new size
+
+    def toggle(self) -> None:
+        self._view = "freq" if self._view == "util" else "util"
+        self.refresh()
+
+    def render(self) -> Text:
+        if not self.size.width or not self.size.height:
+            return Text("")  # not laid out yet; on_resize re-renders once sized
+        width = max(20, self.size.width - 12)
+        height = max(6, self.size.height - 7)
+        util = self._data.get("util", [])
+
+        if self._view == "util":
+            points = [(p["target"], p["watts"]) for p in util]
+            chart = line_chart(points, width, height, "utilisation %", "W", "Power vs utilisation")
+            fit = self._data.get("fit") or {}
+            sub = (
+                f"fit: P ≈ {fit.get('intercept', 0):.1f}W + "
+                f"{fit.get('slope', 0):.3f}·U%   (R²={fit.get('r2', 0):.3f})"
+            )
+        else:
+            points = sorted((p["freq"], p["watts"]) for p in util if p.get("freq"))
+            chart = line_chart(points, width, height, "avg frequency (MHz)", "W", "Power vs frequency")
+            ff = self._data.get("freq_fit") or {}
+            sub = (
+                f"fit: P ≈ {ff.get('intercept', 0):.1f}W + "
+                f"{ff.get('slope_per_ghz', 0):.2f}·GHz   (R²={ff.get('r2', 0):.3f})"
+                if ff else "frequency data unavailable"
+            )
+
+        conc = self._data.get("concentration") or []
+        conc_line = "    ".join(f"{c['label']}: [b]{c['watts']:.1f}W[/b]" for c in conc)
+        return Text.from_markup(
+            "\n".join(chart)
+            + f"\n\n{sub}\n[dim]same total work →[/dim]  {conc_line}\n"
+            + "[dim]f = toggle util/freq · esc = back[/dim]"
+        )
+
+
+class CurveScreen(Screen):
+    """Full-screen curve viewer pushed over the dashboard."""
+
+    BINDINGS = [
+        ("escape", "back", "back"),
+        ("q", "back", "back"),
+        ("f", "toggle", "util/freq"),
+    ]
+
+    def __init__(self, data: dict) -> None:
+        super().__init__()
+        self._data = data
+
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        yield CurvePlot(self._data, id="plot")
+        yield Footer()
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+    def action_toggle(self) -> None:
+        self.query_one(CurvePlot).toggle()
+
+
+_PLOT_CSS = "CurvePlot { padding: 1 2; height: 1fr; }"
+
+
 class WattcherApp(App):
     TITLE = "wattcher"
-    BINDINGS = [("q", "quit", "quit")]
+    BINDINGS = [("q", "quit", "quit"), ("c", "show_curve", "curve")]
     CSS = """
     Screen { background: ansi_default; }
     Horizontal { height: 1fr; }
@@ -140,6 +223,7 @@ class WattcherApp(App):
     .bars, .carbon { height: auto; }
     #left { width: 3fr; }
     #right { width: 2fr; }
+    CurvePlot { padding: 1 2; height: 1fr; }
     """
 
     def __init__(self, source: SensorSource, interval: float = 1.0) -> None:
@@ -173,6 +257,13 @@ class WattcherApp(App):
         # blocking network calls — runs off the UI thread
         self._carbon = fetch_carbon()
 
+    def action_show_curve(self) -> None:
+        data = load_curve()
+        if data:
+            self.push_screen(CurveScreen(data))
+        else:
+            self.notify("No curve data yet — run `wattcher curve` first.", severity="warning")
+
     def _tick(self) -> None:
         self._render_sample(self._source.sample())
 
@@ -200,3 +291,34 @@ class WattcherApp(App):
         self.query_one("#cstates", BarsPanel).update_rows(
             rows, header="% of time per state — C0 = awake, deeper = more power saved"
         )
+
+
+class CurveViewerApp(App):
+    """Standalone viewer for a saved curve — needs no RAPL, runs anywhere."""
+
+    TITLE = "wattcher curve"
+    BINDINGS = [("q", "quit", "quit"), ("f", "toggle", "util/freq")]
+    CSS = "Screen { background: ansi_default; }\n" + _PLOT_CSS
+
+    def __init__(self, data: dict) -> None:
+        super().__init__()
+        self._data = data
+
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        yield CurvePlot(self._data, id="plot")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self.register_theme(_THEME)
+        self.theme = "wattcher"
+
+    def action_toggle(self) -> None:
+        self.query_one(CurvePlot).toggle()
+
+
+def run_curve_viewer(path: str | None = None) -> None:
+    data = load_curve(Path(path) if path else None)
+    if not data:
+        raise SystemExit("wattcher: no curve data — run `wattcher curve` first")
+    CurveViewerApp(data).run()
