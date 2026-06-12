@@ -148,16 +148,16 @@ class CurvePlot(Static):
         util = self._data.get("util", [])
 
         if self._view == "util":
-            points = [(p["target"], p["watts"]) for p in util]
-            chart = line_chart(points, width, height, "utilisation %", "W", "Power vs utilisation")
+            points = sorted((p["watts"], p["target"]) for p in util)  # x=power, y=util%
+            chart = line_chart(points, width, height, "power (W)", "%", "Utilisation vs power")
             fit = self._data.get("fit") or {}
             sub = (
                 f"fit: P ≈ {fit.get('intercept', 0):.1f}W + "
                 f"{fit.get('slope', 0):.3f}·U%   (R²={fit.get('r2', 0):.3f})"
             )
         else:
-            points = sorted((p["freq"], p["watts"]) for p in util if p.get("freq"))
-            chart = line_chart(points, width, height, "avg frequency (MHz)", "W", "Power vs frequency")
+            points = sorted((p["watts"], p["freq"]) for p in util if p.get("freq"))  # x=power, y=freq
+            chart = line_chart(points, width, height, "power (W)", "MHz", "Frequency vs power")
             ff = self._data.get("freq_fit") or {}
             sub = (
                 f"fit: P ≈ {ff.get('intercept', 0):.1f}W + "
