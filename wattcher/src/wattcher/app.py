@@ -5,11 +5,13 @@ from __future__ import annotations
 
 from collections import deque
 
+from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.theme import Theme
 from textual.widgets import Footer, Header, Sparkline, Static
 
+from wattcher.carbon import CarbonIntensity, fetch_carbon
 from wattcher.sample import Sample
 from wattcher.sensors import SensorSource
 
@@ -91,24 +93,51 @@ class BarsPanel(Vertical):
         self.query_one(".bars", Static).update("\n".join(lines))
 
 
+class CarbonPanel(Vertical):
+    """Live grid carbon intensity, turning watts into grams of CO2."""
+
+    def __init__(self, title: str, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.border_title = title
+
+    def compose(self) -> ComposeResult:
+        yield Static("locating grid…", classes="carbon")
+
+    def update_carbon(
+        self, carbon: CarbonIntensity | None, watts: float, joules: float
+    ) -> None:
+        if carbon is None:
+            self.query_one(".carbon", Static).update("locating grid…")
+            return
+        tag = "" if carbon.live else "  [dim](static)[/dim]"
+        self.query_one(".carbon", Static).update(
+            f"[b]{carbon.grams_per_kwh:5.0f}[/b] gCO₂/kWh{tag}\n"
+            f"[b]{carbon.grams_per_hour(watts):5.1f}[/b] gCO₂/h   "
+            f"now at {watts:.1f} W\n"
+            f"Σ [b]{carbon.grams_for_joules(joules):,.1f}[/b] gCO₂ this session\n"
+            f"[dim]{carbon.zone} · {carbon.source}[/dim]"
+        )
+
+
 class WattcherApp(App):
     TITLE = "wattcher"
     BINDINGS = [("q", "quit", "quit")]
     CSS = """
     Screen { background: ansi_default; }
     Horizontal { height: 1fr; }
-    TrendPanel, BarsPanel {
+    TrendPanel, BarsPanel, CarbonPanel {
         border: round $primary;
         border-title-color: $accent;
         padding: 0 1;
     }
     TrendPanel { height: 1fr; }
     BarsPanel { height: 1fr; }
+    CarbonPanel { height: 6; }
     .headline { height: 1; }
     Sparkline { height: 1fr; min-height: 3; margin: 1 0; }
     Sparkline > .sparkline--max-color { color: $accent; }
     .stats { height: 1; color: $text-muted; }
-    .bars { height: auto; }
+    .bars, .carbon { height: auto; }
     #left { width: 3fr; }
     #right { width: 2fr; }
     """
@@ -117,6 +146,7 @@ class WattcherApp(App):
         super().__init__()
         self._source = source
         self._interval = interval
+        self._carbon: CarbonIntensity | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -124,6 +154,7 @@ class WattcherApp(App):
             with Vertical(id="left"):
                 yield TrendPanel("Package Power", "W", id="power")
                 yield TrendPanel("Package Temperature", "°C", id="temp")
+                yield CarbonPanel("Carbon", id="carbon")
             with Vertical(id="right"):
                 yield BarsPanel("CPU", id="cpu")
                 yield BarsPanel("CPU Sleep States", id="cstates")
@@ -134,6 +165,13 @@ class WattcherApp(App):
         self.theme = "wattcher"
         self.sub_title = self._source.description
         self.set_interval(self._interval, self._tick)
+        self._refresh_carbon()
+        self.set_interval(900, self._refresh_carbon)  # grid intensity drifts slowly
+
+    @work(thread=True, exclusive=True)
+    def _refresh_carbon(self) -> None:
+        # blocking network calls — runs off the UI thread
+        self._carbon = fetch_carbon()
 
     def _tick(self) -> None:
         self._render_sample(self._source.sample())
@@ -146,6 +184,9 @@ class WattcherApp(App):
             s.package_watts, extra=f"Σ {s.package_joules:,.0f} J   [{breakdown}]"
         )
         self.query_one("#temp", TrendPanel).update_value(s.package_temp_c)
+        self.query_one("#carbon", CarbonPanel).update_carbon(
+            self._carbon, s.package_watts, s.package_joules
+        )
 
         freq = f"avg freq {s.avg_freq_mhz:,.0f} MHz" if s.avg_freq_mhz else ""
         cpu_rows = [("all", s.busy_pct)] + [

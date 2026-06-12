@@ -15,6 +15,8 @@ the same kernel counters directly (no subprocesses).
   frequency from cpufreq.
 - **CPU sleep states** — % of time spent in each idle C-state (where the CPU
   sleeps, and how deeply) from `/sys/devices/system/cpu/cpu*/cpuidle`.
+- **Carbon** — live grid carbon intensity for your location turned into
+  gCO₂/h and a running session total, so wattage reads out as emissions.
 
 ## Running
 
@@ -27,6 +29,39 @@ Press `q` to quit.
 
 Requires Linux with RAPL (`/sys/class/powercap`); on other machines it exits
 with an error explaining what's missing.
+
+### Carbon intensity
+
+The Carbon panel geolocates the machine from its public IP (ip-api.com) and
+looks up the grid's carbon intensity (gCO₂eq/kWh), then multiplies it by the
+live package power. Sources, best first:
+
+- **Electricity Maps** — live and global, if you set a token:
+  `export WATTCHER_EMAPS_TOKEN=...`
+- **UK National Grid** (carbonintensity.org.uk) — live, keyless, used in GB.
+- a built-in table of recent **annual averages** otherwise — labelled
+  `(static)`, so it works anywhere with no key and no network.
+
+## Power experiments
+
+```sh
+sudo uv run wattcher curve                      # default 0,20,…,100% sweep
+sudo uv run wattcher curve --levels 0,25,50,75,100
+```
+
+`wattcher curve` drives the CPU to known utilisation levels (a load generator
+duty-cycles busy processes pinned to individual cores) and measures
+steady-state package power at each, then reports:
+
+- **Utilisation → power** — a fitted `P ≈ P_idle + slope·U%` line (static power
+  plus dynamic power proportional to activity), with idle/full-load endpoints.
+- **Frequency → power** — power against the average frequency observed during
+  the sweep; because dynamic power scales ~V²·f, this climbs faster than the
+  utilisation line.
+- **Same total work, spread differently** — e.g. *N/2 cores at 100%* vs *N
+  cores at 50%*: identical total load, but is it cheaper to concentrate it
+  (letting idle cores sleep deep) or spread it (letting every core clock
+  lower)? The answer is empirical and printed for your chip.
 
 ### Permissions on Linux
 
@@ -44,12 +79,14 @@ sudo chmod a+r /sys/class/powercap/intel-rapl*/energy_uj
 - `src/wattcher/sensors/linux.py` — real counter reads (RAPL, thermal,
   /proc/stat, cpufreq, cpuidle)
 - `src/wattcher/app.py` — Textual TUI
+- `src/wattcher/carbon.py` — IP geolocation + grid carbon intensity
+- `src/wattcher/loadgen.py` — controllable per-core load for experiments
+- `src/wattcher/curve.py` — the `wattcher curve` power-curve measurement
 
 ## Roadmap
 
-- Milestone 2: per-process energy attribution ("top, but for joules")
-- Milestone 3: `wattcher run <cmd>` / `wattcher race <a> <b>` energy
-  measurement modes
+- Per-process energy attribution ("top, but for joules")
+- `wattcher run <cmd>` / `wattcher race <a> <b>` energy measurement modes
 
 ## PROMPTS USED
 
@@ -114,3 +151,14 @@ roughly the questions you would ask to build this from the ground up.
    how to run it, the layout of the code, and a roadmap (per-process energy
    attribution, and `wattcher run <cmd>` / `wattcher race <a> <b>`
    measurement modes)."
+
+7. **Tie wattage to real-world carbon, and map the power curves.**
+   "Add a live carbon panel: geolocate the machine from its public IP, look up
+   the grid's carbon intensity, and turn package watts into gCO₂/h and a
+   running session total — degrading gracefully from a live API to a static
+   annual-average table so it works with no key. Then add a `wattcher curve`
+   command that drives the CPU to known utilisation levels with a duty-cycled,
+   core-pinned load generator and measures steady-state power, reporting the
+   utilisation→power fit, the frequency→power relationship, and a
+   concentrated-vs-spread experiment (the same total load on few cores at high
+   duty versus many cores at low duty)."
