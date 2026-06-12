@@ -154,13 +154,17 @@ def run_curve(
         print(f"\n  fit: power ≈ {fa:.1f} W + {fb * 1000:.2f} W/GHz   (R²={fr2:.3f})")
 
     # -- concentrated vs spread (same total work) ------------------------
-    half = max(1, ncpu // 2)
-    total_pct = half * 100
-    configs = [
-        (cores[:half], 1.0, f"{half} cores @ 100%"),
-        (cores, half / ncpu, f"{ncpu} cores @ {100 * half / ncpu:.0f}%"),
-    ]
-    print(f"\nSame total work (~{total_pct}% CPU), distributed differently")
+    # Fixed total of `base` fully-busy cores' worth of work, delivered on more
+    # and more cores at lower duty: 2 cores @100%, 4 @50%, 8 @25%, …
+    base = 2 if ncpu >= 4 else 1
+    total_pct = base * 100
+    ks = []
+    k = base
+    while k <= ncpu:
+        ks.append(k)
+        k *= 2
+    configs = [(cores[:k], base / k, f"{k} cores @ {100 * base / k:.0f}%") for k in ks]
+    print(f"\nSame total work (~{total_pct}% CPU), spread across more cores")
     results = []
     for sel, duty, label in configs:
         with load(sel, duty):
@@ -171,12 +175,13 @@ def run_curve(
         results.append((label, watts, freq))
         print(f"  {label:<18} → {watts:>5.1f} W   (avg freq {fr})")
 
-    if len(results) == 2:
-        (la, wa, _), (lb, wb, _) = results
-        cheaper, dearer = (results[0], results[1]) if wa < wb else (results[1], results[0])
-        delta = dearer[1] - cheaper[1]
-        pct = 100 * delta / dearer[1] if dearer[1] else 0
-        print(f"\n  → '{cheaper[0]}' is cheaper by {delta:.1f} W ({pct:.0f}%).")
+    if len(results) >= 2:
+        cheapest = min(results, key=lambda r: r[1])
+        dearest = max(results, key=lambda r: r[1])
+        delta = dearest[1] - cheapest[1]
+        pct = 100 * delta / dearest[1] if dearest[1] else 0
+        print(f"\n  → '{cheapest[0]}' is cheapest, {delta:.1f} W ({pct:.0f}%)"
+              f" below '{dearest[0]}'.")
         print("    Spreading lets each core clock lower (dynamic power ~V²·f);"
               " concentrating lets idle cores reach deeper C-states. The winner"
               " depends on which effect dominates on this chip.")

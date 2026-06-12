@@ -125,19 +125,47 @@ class CarbonPanel(Vertical):
         )
 
 
+_VIEWS = ("util", "freq", "cores")
+
+
+def _concentration_chart(conc: list[dict], width: int) -> tuple[list[str], str]:
+    """Horizontal bar chart of the 'same total work, more cores' experiment."""
+    if not conc:
+        return (["(no concentration data — re-run `wattcher curve`)"], "")
+    wmax = max(c["watts"] for c in conc) or 1.0
+    bw = max(10, width - 32)
+    rows = ["Same total work, spread across more cores", ""]
+    for c in conc:
+        filled = round(c["watts"] / wmax * bw)
+        bar = "█" * filled + "·" * (bw - filled)
+        freq = f"{c['freq']:,.0f}MHz" if c.get("freq") else ""
+        rows.append(f"{c['label']:<14} {bar} [b]{c['watts']:5.1f}W[/b]  [dim]{freq}[/dim]")
+    sub = ""
+    if len(conc) >= 2:
+        cheap = min(conc, key=lambda c: c["watts"])
+        dear = max(conc, key=lambda c: c["watts"])
+        delta = dear["watts"] - cheap["watts"]
+        pct = 100 * delta / dear["watts"] if dear["watts"] else 0
+        sub = (
+            f"cheapest: [b]{cheap['label']}[/b] — {delta:.1f}W ({pct:.0f}%) under "
+            f"{dear['label']}"
+        )
+    return rows, sub
+
+
 class CurvePlot(Static):
-    """Renders a saved power curve as a braille chart; toggles util/freq view."""
+    """Renders a saved power curve; cycles util / freq / cores views."""
 
     def __init__(self, data: dict, **kwargs) -> None:
         super().__init__(**kwargs)
         self._data = data
-        self._view = "util"  # or "freq"
+        self._view = "util"  # one of _VIEWS
 
     def on_resize(self) -> None:
         self.refresh()  # re-fit the chart to the new size
 
     def toggle(self) -> None:
-        self._view = "freq" if self._view == "util" else "util"
+        self._view = _VIEWS[(_VIEWS.index(self._view) + 1) % len(_VIEWS)]
         self.refresh()
 
     def render(self) -> Text:
@@ -155,7 +183,7 @@ class CurvePlot(Static):
                 f"fit: P ≈ {fit.get('intercept', 0):.1f}W + "
                 f"{fit.get('slope', 0):.3f}·U%   (R²={fit.get('r2', 0):.3f})"
             )
-        else:
+        elif self._view == "freq":
             points = sorted((p["watts"], p["freq"]) for p in util if p.get("freq"))  # x=power, y=freq
             chart = line_chart(points, width, height, "power (W)", "MHz", "Frequency vs power")
             ff = self._data.get("freq_fit") or {}
@@ -164,13 +192,13 @@ class CurvePlot(Static):
                 f"{ff.get('slope_per_ghz', 0):.2f}·GHz   (R²={ff.get('r2', 0):.3f})"
                 if ff else "frequency data unavailable"
             )
+        else:  # cores: concentration experiment
+            chart, sub = _concentration_chart(self._data.get("concentration") or [], width)
 
-        conc = self._data.get("concentration") or []
-        conc_line = "    ".join(f"{c['label']}: [b]{c['watts']:.1f}W[/b]" for c in conc)
         return Text.from_markup(
             "\n".join(chart)
-            + f"\n\n{sub}\n[dim]same total work →[/dim]  {conc_line}\n"
-            + "[dim]f = toggle util/freq · esc = back[/dim]"
+            + f"\n\n{sub}\n"
+            + "[dim]f = cycle view (util / freq / cores) · esc = back[/dim]"
         )
 
 
@@ -180,7 +208,7 @@ class CurveScreen(Screen):
     BINDINGS = [
         ("escape", "back", "back"),
         ("q", "back", "back"),
-        ("f", "toggle", "util/freq"),
+        ("f", "toggle", "cycle view"),
     ]
 
     def __init__(self, data: dict) -> None:
@@ -297,7 +325,7 @@ class CurveViewerApp(App):
     """Standalone viewer for a saved curve — needs no RAPL, runs anywhere."""
 
     TITLE = "wattcher curve"
-    BINDINGS = [("q", "quit", "quit"), ("f", "toggle", "util/freq")]
+    BINDINGS = [("q", "quit", "quit"), ("f", "toggle", "cycle view")]
     CSS = "Screen { background: ansi_default; }\n" + _PLOT_CSS
 
     def __init__(self, data: dict) -> None:

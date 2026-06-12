@@ -59,14 +59,15 @@ steady-state package power at each, then reports:
 - **Frequency → power** — power against the average frequency observed during
   the sweep; because dynamic power scales ~V²·f, this climbs faster than the
   utilisation line.
-- **Same total work, spread differently** — e.g. *N/2 cores at 100%* vs *N
-  cores at 50%*: identical total load, but is it cheaper to concentrate it
-  (letting idle cores sleep deep) or spread it (letting every core clock
-  lower)? The answer is empirical and printed for your chip.
+- **Same total work, spread differently** — a fixed ~200% load delivered as
+  *2 cores @ 100%* vs *4 @ 50%* vs *8 @ 25%*: identical total work, but is it
+  cheaper to concentrate it (letting idle cores sleep deep) or spread it
+  (letting every core clock lower)? The answer is empirical and printed for
+  your chip.
 
 The sweep is saved to `$XDG_DATA_HOME/wattcher/curve.json` (override with
-`--out`). View it as a braille chart, with a `f` key to toggle the
-utilisation and frequency curves:
+`--out`). View it as a braille chart, with `f` to cycle three views —
+utilisation, frequency, and the concentrated-vs-spread bar chart:
 
 ```sh
 uv run wattcher plot          # standalone viewer — no RAPL needed, runs anywhere
